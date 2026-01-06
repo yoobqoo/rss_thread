@@ -30,6 +30,16 @@
             -ms-overflow-style: none;  /* IE and Edge */
             scrollbar-width: none;  /* Firefox */
         }
+        #root:empty::before {
+            content: 'Loading RSS Strategist...';
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            color: #333;
+        }
     </style>
 <script type="importmap">
 {
@@ -46,6 +56,7 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- Vite가 이 파일을 추적하여 App.tsx 및 모든 의존성을 번들링하도록 상대 경로로 지정 -->
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

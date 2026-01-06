@@ -53,8 +53,8 @@ const App: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const processedLinksRef = useRef<Set<string>>(new Set());
 
-  // API Key 확인
-  const hasApiKey = !!process.env.API_KEY;
+  const apiKey = process.env.API_KEY;
+  const hasApiKey = !!apiKey && apiKey !== '';
 
   useEffect(() => {
     processedLinksRef.current = new Set(posts.map(p => p.originalLink));
@@ -88,19 +88,32 @@ const App: React.FC = () => {
     localStorage.setItem('threads-generated-posts', JSON.stringify(posts));
   }, [posts]);
 
+  const clearHistory = () => {
+    if (window.confirm('모든 생성된 포스트 기록을 삭제하시겠습니까? (RSS 데이터 재동기화가 가능해집니다)')) {
+      setPosts([]);
+      processedLinksRef.current = new Set();
+      localStorage.removeItem('threads-generated-posts');
+      setStatus('기록 삭제 완료');
+      setTimeout(() => setStatus(''), 2000);
+    }
+  };
+
   const processBlogItems = async (items: BlogData[], sourceName: string) => {
     if (!hasApiKey) {
-      setStatus('에러: API Key가 설정되지 않았습니다.');
+      setStatus('에러: API Key 누락');
       return 0;
     }
 
     const newItems = items.filter(item => !processedLinksRef.current.has(item.link));
-    if (newItems.length === 0) return 0;
+    
+    if (newItems.length === 0) {
+      console.log(`${sourceName}: 새로운 항목 없음`);
+      return 0;
+    }
 
     let count = 0;
     for (const item of newItems) {
       try {
-        if (processedLinksRef.current.has(item.link)) continue;
         setStatus(`${sourceName}: 분석 중... (${count + 1}/${newItems.length})`);
         const content = await generateThreadsPost(item);
         
@@ -127,9 +140,12 @@ const App: React.FC = () => {
   const syncAllFeeds = useCallback(async () => {
     if (isProcessing) return;
     setIsProcessing(true);
-    setStatus('동기화 시작...');
+    setStatus('RSS 확인 중...');
     
     let totalAdded = 0;
+    let totalFound = 0;
+    let errors = 0;
+
     try {
       const updatedFeeds = [...feeds];
       for (let i = 0; i < updatedFeeds.length; i++) {
@@ -137,45 +153,60 @@ const App: React.FC = () => {
         try {
           setStatus(`${feed.name} 연결 중...`);
           const items = await fetchRSS(feed.url);
+          totalFound += items.length;
           updatedFeeds[i].lastFetched = Date.now();
           const addedCount = await processBlogItems(items, feed.name);
           totalAdded += addedCount;
         } catch (e) { 
-          setStatus(`${feed.name} 연결 실패`);
+          console.error(`Feed Error [${feed.name}]:`, e);
+          errors++;
+          setStatus(`${feed.name} 연결 실패 (프록시 확인 필요)`);
+          await new Promise(r => setTimeout(r, 1500));
         }
       }
       setFeeds(updatedFeeds);
-      setStatus(totalAdded > 0 ? `${totalAdded}개 생성 완료` : '업데이트 없음');
+      
+      if (totalAdded > 0) {
+        setStatus(`${totalAdded}개의 새 포스트 생성!`);
+      } else if (errors > 0) {
+        setStatus(`일부 피드 연결 실패 (콘솔 확인)`);
+      } else {
+        setStatus(totalFound > 0 ? `새로운 소식이 없습니다.` : '피드 데이터를 찾을 수 없음');
+      }
     } catch (err) {
-      setStatus('동기화 중 오류');
+      setStatus('동기화 처리 오류');
     } finally {
       setIsProcessing(false);
-      setTimeout(() => setStatus(''), 3000);
+      setTimeout(() => setStatus(''), 5000);
     }
   }, [feeds, isProcessing, hasApiKey]);
-
-  useEffect(() => {
-    if (hasApiKey && posts.length === 0 && feeds.length > 0) {
-      syncAllFeeds();
-    }
-  }, [hasApiKey]);
 
   if (!hasApiKey) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
-        <div className="max-w-md space-y-6">
-          <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto text-red-500 text-3xl">
-            <i className="fas fa-exclamation-triangle"></i>
+        <div className="max-w-md space-y-6 animate-in fade-in zoom-in duration-500">
+          <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto text-red-500 text-3xl shadow-2xl shadow-red-500/20">
+            <i className="fas fa-key-skeleton"></i>
           </div>
-          <h1 className="text-2xl font-black">API KEY 미설정</h1>
-          <p className="text-gray-400 text-sm leading-relaxed">
-            Vercel 프로젝트 설정에서 <code className="bg-white/10 px-2 py-1 rounded text-white">API_KEY</code> 환경 변수를 등록해야 합니다.<br/>
-            Gemini API 키를 입력한 후 다시 배포해주세요.
-          </p>
-          <div className="pt-4">
-            <a href="https://vercel.com" target="_blank" className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all">
-              Vercel 대시보드 가기
+          <h1 className="text-2xl font-black text-white">환경 변수 설정 오류</h1>
+          <div className="bg-white/5 border border-white/10 p-6 rounded-2xl text-left space-y-4">
+            <p className="text-gray-300 text-sm leading-relaxed">
+              Vercel 대시보드에서 다음 이름으로 환경 변수를 등록해야 합니다:
+            </p>
+            <div className="flex items-center justify-between bg-black p-3 rounded-xl border border-red-500/30">
+              <span className="text-red-400 font-mono font-bold">Variable Name:</span>
+              <code className="text-white font-mono font-black px-2 py-1 bg-white/10 rounded">API_KEY</code>
+            </div>
+            <p className="text-gray-500 text-[11px]">
+              * <span className="text-white font-bold">GEMINI_API_KEY</span>가 아닙니다. 반드시 <span className="text-white font-bold">API_KEY</span>로 입력해주세요.
+            </p>
+          </div>
+          <div className="pt-4 flex flex-col gap-3">
+            <a href="https://vercel.com" target="_blank" rel="noopener noreferrer" className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all flex items-center justify-center gap-2">
+              <i className="fas fa-external-link-alt"></i>
+              Vercel 대시보드 열기
             </a>
+            <p className="text-gray-500 text-[11px]">변수 수정 후 반드시 <strong>Redeploy</strong>를 수행하세요.</p>
           </div>
         </div>
       </div>
@@ -191,17 +222,17 @@ const App: React.FC = () => {
               <i className="fas fa-layer-group text-white"></i>
             </div>
             <div>
-              <h1 className="text-lg font-black tracking-tight leading-none mb-1">RSS STRATEGIST</h1>
-              <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">Agency Intelligence v2.5</p>
+              <h1 className="text-lg font-black tracking-tight leading-none mb-1 uppercase">RSS Strategist</h1>
+              <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">Viral Content Lab</p>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
              {status && (
-              <span className="hidden sm:inline-flex items-center gap-2 text-purple-400 text-[10px] font-bold px-3 py-1 bg-purple-500/10 border border-purple-500/20 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span>
+              <div className="hidden sm:flex items-center gap-2 text-purple-400 text-[10px] font-bold px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full animate-in fade-in slide-in-from-top-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
                 {status}
-              </span>
+              </div>
             )}
             <button 
               onClick={syncAllFeeds}
@@ -245,6 +276,16 @@ const App: React.FC = () => {
                 processBlogItems(items, '직접 입력');
               }} isLoading={isProcessing} />
             </section>
+
+            <div className="h-px bg-white/5"></div>
+
+            <button 
+              onClick={clearHistory}
+              className="w-full py-3 rounded-xl text-[10px] font-black text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all border border-transparent hover:border-red-500/20 flex items-center justify-center gap-2"
+            >
+              <i className="fas fa-trash-alt"></i>
+              생성 기록 초기화
+            </button>
           </div>
         </aside>
 
@@ -256,13 +297,13 @@ const App: React.FC = () => {
                   <button
                     key={date}
                     onClick={() => setSelectedDate(date)}
-                    className={`px-5 py-2 rounded-xl text-[11px] font-black transition-all border ${
+                    className={`px-5 py-2 rounded-xl text-[11px] font-black transition-all border shrink-0 ${
                       selectedDate === date 
-                      ? 'bg-purple-600 text-white border-purple-500' 
-                      : 'bg-white/5 text-gray-500 border-white/5'
+                      ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20' 
+                      : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/20'
                     }`}
                   >
-                    {date} <span className="ml-2 opacity-40">{groupedPosts[date].length}</span>
+                    {date} <span className="ml-2 opacity-40 font-mono">{groupedPosts[date].length}</span>
                   </button>
                 ))}
               </div>
@@ -286,7 +327,10 @@ const App: React.FC = () => {
                 <i className={`fas ${isProcessing ? 'fa-spinner fa-spin' : 'fa-satellite-dish'} animate-pulse`}></i>
               </div>
               <h3 className="text-lg font-bold text-gray-400">데이터를 기다리는 중...</h3>
-              <p className="text-gray-600 text-sm mt-2">상단의 '데이터 새로고침' 버튼을 눌러주세요.</p>
+              <p className="text-gray-600 text-sm mt-2">상단의 '데이터 새로고침' 버튼을 눌러 피드를 동기화하세요.</p>
+              <p className="text-gray-800 text-[10px] mt-4 max-w-xs uppercase font-black tracking-widest">
+                Tip: 데이터가 안 나온다면 '생성 기록 초기화'를 눌러보세요.
+              </p>
             </div>
           )}
         </section>
