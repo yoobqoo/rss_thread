@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { FeedManager } from './components/FeedManager.tsx';
-import { XTMLImporter } from './components/XTMLImporter.tsx';
-import { PostPreview } from './components/PostPreview.tsx';
-import { BlogData, RSSFeed, GeneratedPost } from './types.ts';
-import { fetchRSS, parseXTMLString } from './services/rssService.ts';
-import { generateThreadsPost } from './services/geminiService.ts';
+import { FeedManager } from './components/FeedManager';
+import { XTMLImporter } from './components/XTMLImporter';
+import { PostPreview } from './components/PostPreview';
+import { BlogData, RSSFeed, GeneratedPost } from './types';
+import { fetchRSS, parseXTMLString } from './services/rssService';
+import { generateThreadsPost } from './services/geminiService';
 
 const DEFAULT_FEEDS: RSSFeed[] = [
   {
@@ -35,7 +35,6 @@ const App: React.FC = () => {
       const parsed = saved ? JSON.parse(saved) : [];
       return parsed.length === 0 ? DEFAULT_FEEDS : parsed;
     } catch (e) {
-      console.error("Failed to parse feeds from localStorage", e);
       return DEFAULT_FEEDS;
     }
   });
@@ -45,20 +44,21 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('threads-generated-posts');
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
-      console.error("Failed to parse posts from localStorage", e);
       return [];
     }
   });
 
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [status, setStatus] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const processedLinksRef = useRef<Set<string>>(new Set());
+
+  // API Key 확인
+  const hasApiKey = !!process.env.API_KEY;
 
   useEffect(() => {
     processedLinksRef.current = new Set(posts.map(p => p.originalLink));
   }, [posts]);
-
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState<string>('');
-  const [selectedDate, setSelectedDate] = useState<string>('');
 
   const groupedPosts = useMemo(() => {
     const groups: Record<string, GeneratedPost[]> = {};
@@ -89,17 +89,18 @@ const App: React.FC = () => {
   }, [posts]);
 
   const processBlogItems = async (items: BlogData[], sourceName: string) => {
-    const newItems = items.filter(item => !processedLinksRef.current.has(item.link));
-    
-    if (newItems.length === 0) {
+    if (!hasApiKey) {
+      setStatus('에러: API Key가 설정되지 않았습니다.');
       return 0;
     }
+
+    const newItems = items.filter(item => !processedLinksRef.current.has(item.link));
+    if (newItems.length === 0) return 0;
 
     let count = 0;
     for (const item of newItems) {
       try {
         if (processedLinksRef.current.has(item.link)) continue;
-
         setStatus(`${sourceName}: 분석 중... (${count + 1}/${newItems.length})`);
         const content = await generateThreadsPost(item);
         
@@ -126,7 +127,7 @@ const App: React.FC = () => {
   const syncAllFeeds = useCallback(async () => {
     if (isProcessing) return;
     setIsProcessing(true);
-    setStatus('모든 피드 연결 시도 중...');
+    setStatus('동기화 시작...');
     
     let totalAdded = 0;
     try {
@@ -139,42 +140,47 @@ const App: React.FC = () => {
           updatedFeeds[i].lastFetched = Date.now();
           const addedCount = await processBlogItems(items, feed.name);
           totalAdded += addedCount;
-        } catch (e: any) { 
-          console.error(`Feed fetch error for ${feed.name}:`, e);
+        } catch (e) { 
           setStatus(`${feed.name} 연결 실패`);
-          await new Promise(r => setTimeout(r, 1000));
         }
       }
       setFeeds(updatedFeeds);
-      setStatus(totalAdded > 0 ? `${totalAdded}개의 새 콘텐츠 생성 완료` : '이미 최신 상태입니다.');
+      setStatus(totalAdded > 0 ? `${totalAdded}개 생성 완료` : '업데이트 없음');
     } catch (err) {
-      setStatus('동기화 중 오류 발생');
+      setStatus('동기화 중 오류');
     } finally {
       setIsProcessing(false);
       setTimeout(() => setStatus(''), 3000);
     }
-  }, [feeds, isProcessing]);
+  }, [feeds, isProcessing, hasApiKey]);
 
   useEffect(() => {
-    if (posts.length === 0 && feeds.length > 0) {
+    if (hasApiKey && posts.length === 0 && feeds.length > 0) {
       syncAllFeeds();
     }
-  }, []);
+  }, [hasApiKey]);
 
-  const handleXTMLImport = async (xtmlString: string) => {
-    setIsProcessing(true);
-    setStatus('입력 데이터 분석 중...');
-    try {
-      const items = parseXTMLString(xtmlString);
-      const added = await processBlogItems(items, '직접 입력');
-      setStatus(added > 0 ? `${added}개 생성 완료` : '새로운 내용이 없습니다.');
-    } catch (e: any) {
-      setStatus(`에러: ${e.message}`);
-    } finally {
-      setIsProcessing(false);
-      setTimeout(() => setStatus(''), 3000);
-    }
-  };
+  if (!hasApiKey) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-6">
+          <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto text-red-500 text-3xl">
+            <i className="fas fa-exclamation-triangle"></i>
+          </div>
+          <h1 className="text-2xl font-black">API KEY 미설정</h1>
+          <p className="text-gray-400 text-sm leading-relaxed">
+            Vercel 프로젝트 설정에서 <code className="bg-white/10 px-2 py-1 rounded text-white">API_KEY</code> 환경 변수를 등록해야 합니다.<br/>
+            Gemini API 키를 입력한 후 다시 배포해주세요.
+          </p>
+          <div className="pt-4">
+            <a href="https://vercel.com" target="_blank" className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all">
+              Vercel 대시보드 가기
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-purple-500/30">
@@ -234,15 +240,11 @@ const App: React.FC = () => {
               <h2 className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-4">
                 XTML 직접 입력
               </h2>
-              <XTMLImporter onImport={handleXTMLImport} isLoading={isProcessing} />
+              <XTMLImporter onImport={(xtml) => {
+                const items = parseXTMLString(xtml);
+                processBlogItems(items, '직접 입력');
+              }} isLoading={isProcessing} />
             </section>
-          </div>
-          
-          <div className="p-6 rounded-3xl bg-indigo-500/5 border border-indigo-500/10">
-            <h4 className="text-[11px] font-black text-indigo-400 mb-2 uppercase">시스템 안내</h4>
-            <p className="text-[11px] text-gray-500 leading-relaxed">
-               프록시를 통해 중소벤처기업부, 조달청, KOTRA 데이터를 수집합니다. 동기화가 지연될 경우 '새로고침'을 다시 시도해주세요.
-            </p>
           </div>
         </aside>
 
@@ -254,14 +256,13 @@ const App: React.FC = () => {
                   <button
                     key={date}
                     onClick={() => setSelectedDate(date)}
-                    className={`px-5 py-2 rounded-xl text-[11px] font-black whitespace-nowrap transition-all border ${
+                    className={`px-5 py-2 rounded-xl text-[11px] font-black transition-all border ${
                       selectedDate === date 
-                      ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20' 
-                      : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/20'
+                      ? 'bg-purple-600 text-white border-purple-500' 
+                      : 'bg-white/5 text-gray-500 border-white/5'
                     }`}
                   >
-                    {date === new Date().toISOString().split('T')[0] ? '오늘' : date}
-                    <span className="ml-2 opacity-40 font-mono">{groupedPosts[date].length}</span>
+                    {date} <span className="ml-2 opacity-40">{groupedPosts[date].length}</span>
                   </button>
                 ))}
               </div>
@@ -284,12 +285,8 @@ const App: React.FC = () => {
               <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center text-2xl text-gray-700 mb-6">
                 <i className={`fas ${isProcessing ? 'fa-spinner fa-spin' : 'fa-satellite-dish'} animate-pulse`}></i>
               </div>
-              <h3 className="text-lg font-bold text-gray-400">
-                {isProcessing ? '데이터를 가져오는 중...' : '분석된 공고가 없습니다'}
-              </h3>
-              <p className="text-gray-600 text-sm mt-2">
-                {isProcessing ? '프록시 서버를 통해 정보를 수집하고 있습니다.' : "상단의 '데이터 새로고침' 버튼을 눌러주세요."}
-              </p>
+              <h3 className="text-lg font-bold text-gray-400">데이터를 기다리는 중...</h3>
+              <p className="text-gray-600 text-sm mt-2">상단의 '데이터 새로고침' 버튼을 눌러주세요.</p>
             </div>
           )}
         </section>

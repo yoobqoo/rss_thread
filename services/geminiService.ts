@@ -1,10 +1,14 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { BlogData } from "../types.ts";
+import { BlogData } from "../types";
 
 export const generateThreadsPost = async (blogData: BlogData): Promise<string> => {
-  // 인스턴스를 요청 시점에 생성하여 process.env 접근 안정성 확보
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY is missing in environment variables.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     역할: 너는 블로그 데이터를 기반으로 'Threads(스레드)' 플랫폼에 최적화된 바이럴 콘텐츠를 생성하는 전문 소셜 미디어 마케터야.
@@ -23,25 +27,17 @@ export const generateThreadsPost = async (blogData: BlogData): Promise<string> =
     3. 이모지: 문맥에 어울리는 이모지를 적절히 섞어서 작성.
     4. 제한: 공백 포함 400자 이내.
     5. 링크: 마지막에 "더 자세한 내용은 아래 링크에서 확인하세요!"라는 문구와 함께 제공된 URL(${blogData.link})을 반드시 포함.
-    
-    주의사항:
-    - 블로그 내용을 그대로 복사하지 말고, 스레드 유저들이 좋아할 만한 '인사이트' 중심으로 재구성할 것.
   `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-      }
     });
 
-    return response.text || "콘텐츠를 생성하는 데 실패했습니다.";
+    return response.text || "생성 실패";
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw new Error("AI 요청 중 오류가 발생했습니다.");
+    console.error("Gemini Error:", error);
+    throw error;
   }
 };
