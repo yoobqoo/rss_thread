@@ -13,6 +13,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #000000;
             color: #ffffff;
+            margin: 0;
         }
         .threads-gradient {
             background: radial-gradient(circle at top left, #ff3040, #ff5260, #b92b27, #1565c0);
@@ -21,6 +22,20 @@
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #222;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #333;
         }
     </style>
 <script type="importmap">
@@ -36,5 +51,7 @@
 </head>
 <body>
     <div id="root"></div>
+    <!-- 엔트리 포인트 스크립트 추가 -->
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

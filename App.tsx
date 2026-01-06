@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { FeedManager } from './components/FeedManager';
-import { XTMLImporter } from './components/XTMLImporter';
-import { PostPreview } from './components/PostPreview';
-import { BlogData, RSSFeed, GeneratedPost } from './types';
-import { fetchRSS, parseXTMLString } from './services/rssService';
-import { generateThreadsPost } from './services/geminiService';
+import { FeedManager } from './components/FeedManager.tsx';
+import { XTMLImporter } from './components/XTMLImporter.tsx';
+import { PostPreview } from './components/PostPreview.tsx';
+import { BlogData, RSSFeed, GeneratedPost } from './types.ts';
+import { fetchRSS, parseXTMLString } from './services/rssService.ts';
+import { generateThreadsPost } from './services/geminiService.ts';
 
 const DEFAULT_FEEDS: RSSFeed[] = [
   {
@@ -30,17 +30,26 @@ const DEFAULT_FEEDS: RSSFeed[] = [
 
 const App: React.FC = () => {
   const [feeds, setFeeds] = useState<RSSFeed[]>(() => {
-    const saved = localStorage.getItem('threads-rss-feeds');
-    const parsed = saved ? JSON.parse(saved) : [];
-    return parsed.length === 0 ? DEFAULT_FEEDS : parsed;
+    try {
+      const saved = localStorage.getItem('threads-rss-feeds');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return parsed.length === 0 ? DEFAULT_FEEDS : parsed;
+    } catch (e) {
+      console.error("Failed to parse feeds from localStorage", e);
+      return DEFAULT_FEEDS;
+    }
   });
   
   const [posts, setPosts] = useState<GeneratedPost[]>(() => {
-    const saved = localStorage.getItem('threads-generated-posts');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('threads-generated-posts');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse posts from localStorage", e);
+      return [];
+    }
   });
 
-  // 실시간 중복 체크를 위한 ref
   const processedLinksRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -80,7 +89,6 @@ const App: React.FC = () => {
   }, [posts]);
 
   const processBlogItems = async (items: BlogData[], sourceName: string) => {
-    // 이미 처리된 링크 제외
     const newItems = items.filter(item => !processedLinksRef.current.has(item.link));
     
     if (newItems.length === 0) {
@@ -90,7 +98,6 @@ const App: React.FC = () => {
     let count = 0;
     for (const item of newItems) {
       try {
-        // 루프 도중 중복 체크 다시 수행 (비동기 처리 대응)
         if (processedLinksRef.current.has(item.link)) continue;
 
         setStatus(`${sourceName}: 분석 중... (${count + 1}/${newItems.length})`);

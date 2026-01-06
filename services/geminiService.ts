@@ -1,10 +1,11 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { BlogData } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+import { GoogleGenAI } from "@google/genai";
+import { BlogData } from "../types.ts";
 
 export const generateThreadsPost = async (blogData: BlogData): Promise<string> => {
+  // 인스턴스를 요청 시점에 생성하여 process.env 접근 안정성 확보
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
   const prompt = `
     역할: 너는 블로그 데이터를 기반으로 'Threads(스레드)' 플랫폼에 최적화된 바이럴 콘텐츠를 생성하는 전문 소셜 미디어 마케터야.
     
