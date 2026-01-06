@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { BlogData } from '../types';
+import { BlogData } from '../types.ts';
 
 interface InputFormProps {
   onGenerate: (data: BlogData) => void;

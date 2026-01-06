@@ -8,6 +8,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Vercel 등 브라우저 환경에서 process.env 참조 에러 방지
+      window.process = { 
+        env: { 
+          API_KEY: "" // 환경 변수는 빌드/실행 시 시스템에 의해 주입됩니다.
+        } 
+      };
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -51,7 +59,6 @@
 </head>
 <body>
     <div id="root"></div>
-    <!-- 엔트리 포인트 스크립트 추가 -->
     <script type="module" src="./index.tsx"></script>
 </body>
 </html>

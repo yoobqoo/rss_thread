@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { RSSFeed } from '../types';
+import { RSSFeed } from '../types.ts';
 
 interface FeedManagerProps {
   feeds: RSSFeed[];
